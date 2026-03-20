@@ -1,21 +1,29 @@
 """
-Dark Trap Beat
+Dark Trap Beat v3
 Key: C minor | BPM: 152 | 64 bars (~1:41)
 
-Chord Progression (4-bar loop, C minor — i→iv→VI→V):
-  Bar 0: Cm   (C3, Eb3, G3)  — root, dark
-  Bar 1: Fm   (F2, Ab2, C3)  — iv, heavy
-  Bar 2: Ab   (Ab2, C3, Eb3) — VI, tension
-  Bar 3: G    (G2, B2, D3)   — V, resolve
+Research: YouTube tutorials S4CdACq0TuI, 0Eg0wWvm3mM, KGC3tlF1ygE
+  - Layer piano + pad + lead for richness
+  - Sus2/sus4 chords, inversions with common notes
+  - Half-step tension (C→B, Eb→D) in melody
+  - Fast hats (1/32) in hooks, 808 bounce
+  - Melody quiet and lowkey (vel 38-50)
 
-4 Sound Layers:
-  1. Dark bell lead — FAUST FM synth, sparse melody
-  2. 808 bass       — pitched to chord roots, bounce pattern
-  3. Pad            — FAUST synth, dark sustained chords
-  4. Drums          — kick, snare+clap, hi-hat rolls (trap)
+Chord Progression (4-bar loop, C minor — i→iv→VI→V):
+  Bar 0: Cm(sus4)  (C3, F3, G3)   — i sus4, tension
+  Bar 1: Fm        (C3, F3, Ab3)  — iv, inversion sharing C3
+  Bar 2: Ab        (Ab2, C3, Eb3) — VI, dark
+  Bar 3: G         (G2, B2, D3)   — V, resolve
+
+5 Sound Layers:
+  1. Drums     — kick, layered snare+clap, 1/32 hi-hats (hooks), crash
+  2. 808 bass  — bounce pattern, pitched to roots
+  3. Pad       — FAUST synth, sustained chords
+  4. Piano     — arpeggiated chord tones
+  5. Lead      — FAUST FM bell, quiet repetitive motif
 
 Song Structure:
-  Intro     bars  0– 7: Dark pad + sparse lead
+  Intro     bars  0– 7: Pad + sparse piano
   Hook A    bars  8–23: Full arrangement
   Verse     bars 24–39: Stripped drums + 808 + minimal lead
   Bridge    bars 40–47: Pad + held notes, half-time drums
@@ -50,48 +58,61 @@ def bb(bar, beat=0.0):
 
 
 # ─── Chord tables ─────────────────────────────────────────────────────────────
-# i→iv→VI→V in C minor (darker progression)
+# i(sus4)→iv(inv)→VI→V in C minor
+# Inversions chosen so adjacent chords share a common note (C3)
 CHORDS = [
-    ['C3', 'E-3', 'G3' ],   # 0: Cm
-    ['F2', 'A-2', 'C3' ],   # 1: Fm
-    ['A-2', 'C3', 'E-3'],   # 2: Ab
-    ['G2', 'B2',  'D3' ],   # 3: G
+    ['C3', 'F3',  'G3' ],   # 0: Cm sus4 (tension)
+    ['C3', 'F3',  'A-3'],   # 1: Fm 2nd inversion (shares C3, F3)
+    ['A-2', 'C3', 'E-3'],   # 2: Ab root position (shares C3)
+    ['G2', 'B2',  'D3' ],   # 3: G (resolve)
 ]
 CHORDS_LOW = [
-    ['C2', 'E-2', 'G2' ],
-    ['F1', 'A-1', 'C2' ],
+    ['C2', 'F2',  'G2' ],
+    ['C2', 'F2',  'A-2'],
     ['A-1', 'C2', 'E-2'],
     ['G1', 'B1',  'D2' ],
 ]
 BASS_ROOTS = ['C2', 'F1', 'A-1', 'G1']
 
-
-# ─── Dark bell lead tables ─────────────────────────────────────────────────
-# Sparse, dark melody — half-step tension (D→Eb, B→C)
-LEAD_HOOK = [
-    # Cm: whole note
-    [('C4', 4.0)],
-    # Fm: half → rest
-    [('A-3', 2.0), (None, 2.0)],
-    # Ab: whole note
-    [('E-4', 4.0)],
-    # G: half-step tension D→Eb resolve
-    [('D4', 2.0), (None, 2.0)],
+# Piano arpeggiation patterns (indices into chord tones, with octave bumps)
+# Each tuple: (chord_tone_index, octave_shift, duration)
+PIANO_ARP_HOOK = [
+    (0, 0, 1.0), (2, 0, 1.0), (1, 0, 1.0), (2, 1, 1.0),  # root-5th-3rd-5th(up)
+]
+PIANO_ARP_INTRO = [
+    (0, 0, 2.0), (1, 0, 2.0),  # slower, just root-3rd
 ]
 
-# Verse: 1 note every 2 bars
+
+# ─── Lead melody tables ──────────────────────────────────────────────────────
+# MELODY TIMBRE RULE: quiet (vel 38-50), repetitive 2-bar motif,
+# half-step tension (C→B, Eb→D). Never raise above vel 50.
+
+# Hook: repetitive 2-bar motif, repeated over 4-bar chord cycle
+LEAD_HOOK = [
+    # Bar 0 (Cm): C4 → B3 (half-step down = tension)
+    [('C4', 1.5), ('B3', 0.5), (None, 2.0)],
+    # Bar 1 (Fm): rest → Ab3
+    [(None, 2.0), ('A-3', 2.0)],
+    # Bar 2 (Ab): Eb4 → D4 (half-step tension)
+    [('E-4', 1.5), ('D4', 0.5), (None, 2.0)],
+    # Bar 3 (G): rest
+    [(None, 4.0)],
+]
+
+# Verse: 1 note every 2 bars (sparse)
 LEAD_VERSE = [
     [(None, 4.0)],
     [('C4', 4.0)],
     [(None, 4.0)],
-    [('A-3', 4.0)],
+    [(None, 4.0)],
 ]
 
-# Intro: single dark tones, octave 3
+# Intro: silence (piano carries it)
 LEAD_INTRO = [
-    [('C3', 3.0), (None, 1.0)],
     [(None, 4.0)],
-    [('E-3', 3.0), (None, 1.0)],
+    [(None, 4.0)],
+    [(None, 4.0)],
     [(None, 4.0)],
 ]
 
@@ -105,7 +126,8 @@ LEAD_BRIDGE = [
 
 
 # ─── DRUMS ────────────────────────────────────────────────────────────────────
-# GM: 36=kick  38=snare  39=clap  42=closed-HH  46=open-HH  49=crash
+# Juicy Jules Stardust kit (rendered in render script)
+# GM mapping: 36=kick  38=snare  39=clap  42=closed-HH  46=open-HH  49=crash
 def create_drums():
     part = stream.Part()
     part.partName = 'Drums'
@@ -117,11 +139,11 @@ def create_drums():
         n.volume.velocity = min(127, max(1, int(vel)))
         part.insert(offset, n)
 
-    def trap_bar(bar, full_hats=True, half_time=False, crash=False):
-        """One bar of proper trap drums."""
+    def trap_bar(bar, fast_hats=True, half_time=False, crash=False):
+        """One bar of trap drums. Tutorial: snare first, then fast hats."""
         o = bb(bar)
 
-        # Kick: beat 0 only (sparse trap)
+        # Kick: beat 0 (sparse trap)
         hit(o + 0.0, 36, 100)
         # Ghost kick on beat 2.5 every 4 bars
         if bar % 4 == 3:
@@ -131,28 +153,23 @@ def create_drums():
             # Bridge: clap on beat 3 only
             hit(o + 3.0, 39, 88)
         else:
-            # Layered clap + snare on beats 1 and 3
+            # Layered clap + snare on beats 1 and 3 (tutorial: snare first)
             hit(o + 1.0, 38, 86)
             hit(o + 1.0, 39, 82)
             hit(o + 3.0, 38, 90)
             hit(o + 3.0, 39, 86)
 
         # Hi-hats
-        if full_hats:
-            # 1/16th base with alternating velocity
+        if fast_hats:
+            # 1/32 notes in hooks (16 hits per bar = every 0.25 beats)
+            # Tutorial: "every 2 steps = 1/32 notes"
             for i in range(16):
-                t = i * 0.25
-                vel_base = 58 if i % 4 == 0 else (38 if i % 2 == 0 else 24)
-                hit(o + t, 42, vel_base)
-            # 1/32nd rolls before beats 2 and 4
-            for j in range(4):
-                hit(o + 1.5 + j * 0.125, 42, 45 + j * 5)
-                hit(o + 3.5 + j * 0.125, 42, 43 + j * 6)
+                vel = 55 if i % 4 == 0 else (40 if i % 2 == 0 else 28)
+                hit(o + i * 0.25, 42, vel)
         else:
-            # Verse/bridge: 8th notes, low velocity
-            for i in range(8):
-                vel = 35 if i % 2 == 0 else 18
-                hit(o + i * 0.5, 42, vel)
+            # Verse/bridge: quarter notes, low velocity
+            for i in range(4):
+                hit(o + i * 1.0, 42, 32)
 
         # Crash on beat 0
         if crash:
@@ -166,31 +183,32 @@ def create_drums():
         hit(o + h * 0.5, 38, 64 + h * 5)
     hit(o + 3.5, 49, 80)   # crash into hook
 
-    # Hook A (bars 8-23): full trap pattern
+    # Hook A (bars 8-23): full trap with 1/32 hats
     for bar in range(HOOKA_S, HOOKA_E):
         idx = bar - HOOKA_S
-        trap_bar(bar, full_hats=True, crash=(idx % 8 == 0))
+        trap_bar(bar, fast_hats=True, crash=(idx % 8 == 0))
 
     # Verse (bars 24-39): simpler hats
     for bar in range(VERSE_S, VERSE_E):
         idx = bar - VERSE_S
-        trap_bar(bar, full_hats=False, crash=(idx % 8 == 0))
+        trap_bar(bar, fast_hats=False, crash=(idx % 8 == 0))
 
     # Bridge (bars 40-47): half-time feel
     for bar in range(BRIDGE_S, BRIDGE_E):
         idx = bar - BRIDGE_S
-        trap_bar(bar, full_hats=False, half_time=True, crash=(idx == 0))
+        trap_bar(bar, fast_hats=False, half_time=True, crash=(idx == 0))
 
-    # Hook B (bars 48-63): full trap
+    # Hook B (bars 48-63): full trap with 1/32 hats
     for bar in range(HOOKB_S, HOOKB_E):
         idx = bar - HOOKB_S
-        trap_bar(bar, full_hats=True, crash=(idx % 8 == 0))
+        trap_bar(bar, fast_hats=True, crash=(idx % 8 == 0))
 
     return part
 
 
 # ─── 808 BASS ────────────────────────────────────────────────────────────────
 def create_808():
+    """808 with bounce pattern: hit beat 1, ghost beat 2.5, tail beat 3.5."""
     part = stream.Part()
     part.partName = '808 Bass'
     part.insert(0, tempo.MetronomeMark(number=BPM))
@@ -198,16 +216,16 @@ def create_808():
     def bass_bar(bar, vel=90, ghost=True, tail=False):
         o    = bb(bar)
         root = BASS_ROOTS[bar % 4]
-        # Main hit: 3 beats (leaves space for tail/next hit)
-        n1 = note.Note(root, quarterLength=3.0)
+        # Main hit: 2.5 beats
+        n1 = note.Note(root, quarterLength=2.5)
         n1.volume.velocity = vel
         part.insert(o, n1)
         # Bounce ghost at beat 2.5
         if ghost:
-            n2 = note.Note(root, quarterLength=0.5)
+            n2 = note.Note(root, quarterLength=0.75)
             n2.volume.velocity = int(vel * 0.35)
             part.insert(o + 2.5, n2)
-        # Tail hit every other bar
+        # Tail hit at beat 3.5 every other bar
         if tail:
             n3 = note.Note(root, quarterLength=0.25)
             n3.volume.velocity = int(vel * 0.25)
@@ -244,28 +262,80 @@ def create_chords():
         c.volume.velocity = vel
         part.insert(bb(bar), c)
 
-    # Intro: light pad, low octave
-    for bar in range(INTRO_S + 2, INTRO_E):   pad(bar, vel=38, low=True)
+    # Intro: light pad, low octave (from bar 0 — no silent intro)
+    for bar in range(INTRO_S, INTRO_E):    pad(bar, vel=38, low=True)
     # Hook A
-    for bar in range(HOOKA_S, HOOKA_E):       pad(bar, vel=55)
+    for bar in range(HOOKA_S, HOOKA_E):    pad(bar, vel=55)
     # Verse
-    for bar in range(VERSE_S, VERSE_E):        pad(bar, vel=48)
+    for bar in range(VERSE_S, VERSE_E):    pad(bar, vel=48)
     # Bridge
-    for bar in range(BRIDGE_S, BRIDGE_E):      pad(bar, vel=60)
+    for bar in range(BRIDGE_S, BRIDGE_E):  pad(bar, vel=60)
     # Hook B
-    for bar in range(HOOKB_S, HOOKB_E):        pad(bar, vel=55)
+    for bar in range(HOOKB_S, HOOKB_E):    pad(bar, vel=55)
 
     return part
 
 
-# ─── DARK BELL LEAD ───────────────────────────────────────────────────────────
+# ─── PIANO (arpeggiated chords) ──────────────────────────────────────────────
+def create_piano():
+    """Piano arpeggiates chord tones for richness (tutorial: layer piano+pad+lead)."""
+    part = stream.Part()
+    part.partName = 'Piano'
+    part.insert(0, tempo.MetronomeMark(number=BPM))
+
+    def arp_bar(bar, pattern, vel=55):
+        o = bb(bar)
+        chord_tones = CHORDS[bar % 4]
+        beat = 0.0
+        for tone_idx, oct_shift, dur in pattern:
+            idx = min(tone_idx, len(chord_tones) - 1)
+            pitch_str = chord_tones[idx]
+            # Apply octave shift
+            if oct_shift != 0:
+                n_obj = note.Note(pitch_str)
+                n_obj.octave += oct_shift
+                pitch_str = n_obj.nameWithOctave
+            nd = note.Note(pitch_str, quarterLength=dur)
+            nd.volume.velocity = int(np.clip(vel + random.randint(-3, 3), 1, 127))
+            part.insert(o + beat, nd)
+            beat += dur
+
+    # Intro: slow arp (bars 0-7)
+    for bar in range(INTRO_S, INTRO_E):
+        arp_bar(bar, PIANO_ARP_INTRO, vel=42)
+
+    # Hook A: full arp
+    for bar in range(HOOKA_S, HOOKA_E):
+        arp_bar(bar, PIANO_ARP_HOOK, vel=52)
+
+    # Verse: slow arp
+    for bar in range(VERSE_S, VERSE_E):
+        arp_bar(bar, PIANO_ARP_INTRO, vel=40)
+
+    # Bridge: single note per bar
+    for bar in range(BRIDGE_S, BRIDGE_E):
+        chord_tones = CHORDS[bar % 4]
+        nd = note.Note(chord_tones[0], quarterLength=4.0)
+        nd.volume.velocity = 38
+        part.insert(bb(bar), nd)
+
+    # Hook B: full arp
+    for bar in range(HOOKB_S, HOOKB_E):
+        arp_bar(bar, PIANO_ARP_HOOK, vel=52)
+
+    return part
+
+
+# ─── DARK BELL LEAD ──────────────────────────────────────────────────────────
 def create_lead():
-    """Dark bell lead — rendered via FAUST FM synth in the render script."""
+    """Dark bell lead — rendered via FAUST FM synth in the render script.
+    MELODY TIMBRE RULE: sine+FM bell, vel 38-50, never louder than drums/bass.
+    Half-step tension: C→B, Eb→D. Repetitive 2-bar motif."""
     part = stream.Part()
     part.partName = 'Dark Lead'
     part.insert(0, tempo.MetronomeMark(number=BPM))
 
-    def write_phrase(phrase, start_bar, vel=50):
+    def write_phrase(phrase, start_bar, vel=44):
         for bar_off, motif in enumerate(phrase):
             o    = bb(start_bar + bar_off)
             beat = 0.0
@@ -274,29 +344,29 @@ def create_lead():
                     part.insert(o + beat, note.Rest(quarterLength=dur))
                 else:
                     nd = note.Note(pitch, quarterLength=dur)
-                    nd.volume.velocity = int(np.clip(vel + random.randint(-4, 4), 1, 127))
+                    nd.volume.velocity = int(np.clip(vel + random.randint(-3, 3), 1, 50))
                     part.insert(o + beat, nd)
                 beat += dur
 
-    # Intro: dark sparse tones (bars 0-7, repeat 2x)
-    write_phrase(LEAD_INTRO, 0,  vel=40)
-    write_phrase(LEAD_INTRO, 4,  vel=44)
+    # Intro: no lead (piano carries it)
+    write_phrase(LEAD_INTRO, 0, vel=0)
+    write_phrase(LEAD_INTRO, 4, vel=0)
 
     # Hook A: dark melody (bars 8-23, 4x)
     for cycle in range(HOOKA_S, HOOKA_E, 4):
-        write_phrase(LEAD_HOOK, cycle, vel=random.randint(50, 58))
+        write_phrase(LEAD_HOOK, cycle, vel=random.randint(42, 48))
 
     # Verse: minimal (bars 24-39, 4x)
     for cycle in range(VERSE_S, VERSE_E, 4):
         write_phrase(LEAD_VERSE, cycle, vel=random.randint(38, 44))
 
     # Bridge: held notes (bars 40-47, 2x)
-    write_phrase(LEAD_BRIDGE, 40, vel=42)
-    write_phrase(LEAD_BRIDGE, 44, vel=42)
+    write_phrase(LEAD_BRIDGE, 40, vel=40)
+    write_phrase(LEAD_BRIDGE, 44, vel=40)
 
     # Hook B: dark melody (bars 48-63, 4x)
     for cycle in range(HOOKB_S, HOOKB_E, 4):
-        write_phrase(LEAD_HOOK, cycle, vel=random.randint(50, 58))
+        write_phrase(LEAD_HOOK, cycle, vel=random.randint(42, 48))
 
     return part
 
@@ -327,6 +397,8 @@ def fix_instruments(mid, part_names):
             insert_program(track, 38)    # Synth Bass 1
         elif 'chord' in name or 'pad' in name:
             insert_program(track, 89)    # Pad 2 (warm)
+        elif 'piano' in name:
+            insert_program(track, 0)     # Acoustic Grand Piano
         elif 'lead' in name or 'bell' in name:
             insert_program(track, 14)    # Tubular Bells
 
@@ -349,18 +421,22 @@ def solo(part):
 
 
 # ─── COMPOSE & SAVE ───────────────────────────────────────────────────────────
-print('Composing Dark Trap Beat …')
-print(f'  Key: C minor  |  BPM: {BPM}  |  64 bars (~1:41)\n')
+print('Composing Dark Trap Beat v3 …')
+print(f'  Key: C minor  |  BPM: {BPM}  |  64 bars (~1:41)')
+print(f'  Layers: drums, 808, pad, piano, lead')
+print(f'  Kit: Juicy Jules Stardust\n')
 
 drums  = create_drums()
 bass   = create_808()
 chords = create_chords()
+piano  = create_piano()
 lead   = create_lead()
 
 print('Saving individual stems …')
 save(solo(drums),  'DarkTrap_drums.mid')
 save(solo(bass),   'DarkTrap_808.mid')
 save(solo(chords), 'DarkTrap_chords.mid')
+save(solo(piano),  'DarkTrap_piano.mid')
 save(solo(lead),   'DarkTrap_lead.mid')
 
 print('\nSaving full arrangement …')
@@ -368,6 +444,7 @@ full = stream.Score()
 full.append(drums)
 full.append(bass)
 full.append(chords)
+full.append(piano)
 full.append(lead)
 save(full, 'DarkTrap_FULL.mid')
 

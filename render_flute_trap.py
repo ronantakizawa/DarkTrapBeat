@@ -1,14 +1,18 @@
 """
-Dark Trap Beat — Render Script
+Dark Trap Beat v3 — Render Script
 C minor | 152 BPM | 64 bars
+
+Kit: Juicy Jules Stardust (rotated from Obie)
 
 MIDI track indices in DarkTrap_FULL.mid:
   0: tempo/metadata  1: drums  2: 808 bass
-  3: chords/pad      4: dark bell lead
+  3: chords/pad      4: piano  5: dark bell lead
 """
 
 import os
 import sys
+import subprocess
+import json
 import numpy as np
 from collections import defaultdict
 from math import gcd
@@ -22,8 +26,7 @@ import pedalboard as pb
 import dawdreamer as daw
 import pyroomacoustics as pra
 import glob as _glob
-
-
+import pyloudnorm as pyln
 
 
 OUTPUT   = '/Users/ronantakizawa/Documents/FluteTrap_Beat'
@@ -206,6 +209,20 @@ cutoff = 200.0 + lfo * 600.0;
 process = osc * env * gain * 0.40 : fi.lowpass(2, cutoff) <: _, _;
 """
 
+# PIANO TIMBRE RULE: bright attack, fast decay — NOT a pad sound.
+# Triangle + sine with short envelope for plucked/bell-like piano tone.
+PIANO_DSP = """
+import("stdfaust.lib");
+freq = hslider("freq[unit:Hz]", 440, 0.001, 20000, 0.001);
+gain = hslider("gain", 1, 0, 1, 0.01);
+gate = button("gate");
+osc  = os.triangle(freq) * 0.6 + os.osc(freq * 2.0) * 0.15 + os.osc(freq * 3.0) * 0.05;
+env  = en.adsr(0.005, 0.35, 0.15, 0.8, gate);
+process = osc * env * gain * 0.50 : fi.lowpass(2, 4000) <: _, _;
+"""
+
+# LEAD TIMBRE RULE: FM bell, vel 38-50, cap gain at 0.32 in mix.
+# Do NOT raise mix coefficient above 0.32.
 LEAD_DSP = """
 import("stdfaust.lib");
 freq = hslider("freq[unit:Hz]", 440, 0.001, 20000, 0.001);
@@ -238,22 +255,24 @@ print(f'  ✓  FIXED_MID  ({len(mid.tracks)} tracks)')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 1 — Load drum samples (hardcoded trap kit)
+# STEP 1 — Load samples (Juicy Jules Stardust — rotated from Obie)
 # ══════════════════════════════════════════════════════════════════════════════
-print('\nStep 1: Loading trap samples …')
-TRAP_KIT = '/Users/ronantakizawa/Documents/instruments/Obie - ALL GENRE KIT PT 2 /1. TRAP_NEWAGE_ETC/MODERN TRAP'
+print('\nStep 1: Loading Juicy Jules Stardust samples …')
+JJ = '/Users/ronantakizawa/Documents/instruments/☆ Juicy Jules - Stardust ☆/☆ Juicy Jules - Stardust ☆'
 
-KICK     = load_sample(f'{TRAP_KIT}/Kicks/Kick @el.obie 49.wav')
-SNARE    = load_sample(f'{TRAP_KIT}/Snares/Snare  @el.obie 53.wav')
-CLAP     = load_sample(f'{TRAP_KIT}/Claps/Clap @el.obie 26.wav')
-HH_CL   = load_sample(f'{TRAP_KIT}/Closed Hats/HH @el.obie 13.wav')
-HH_OP   = load_sample(f'{TRAP_KIT}/Open Hats/OH  @el.obie 11.wav')
-BASS_808 = load_sample(f'{TRAP_KIT}/808s/808  @el.obie 37.wav')
-PERC     = load_sample(f'{TRAP_KIT}/Percs/PERCS  @el.obie 46.wav')
-CRASH    = load_sample(f'{TRAP_KIT}/Crashes & Cymbals/LOLL @el.obie 1.wav')
+KICK     = load_sample(f'{JJ}/☆ Kicks/Kick - Deep.wav')
+SNARE    = load_sample(f'{JJ}/☆ Snares/Snare - Codeine.wav')
+CLAP     = load_sample(f'{JJ}/☆ Claps/Clap - Layer.wav')
+HH_CL   = load_sample(f'{JJ}/☆ Closed Hats/HH - 3.wav')
+HH_OP   = load_sample(f'{JJ}/☆ Open Hats/OH - Mellow.wav')
+BASS_808 = load_sample(f'{JJ}/☆ 808s/808 - Dark.wav')
+CRASH    = load_sample(f'{JJ}/☆ Crashes/Crash - Classic.wav')
+FX_STORM = load_sample(f'{JJ}/☆ FX/FX - Storm.wav')
+FX_UHH   = load_sample(f'{JJ}/☆ FX/FX - Uhh.wav')
 
 print(f'  Kick={len(KICK)/SR:.2f}s  Snare={len(SNARE)/SR:.2f}s  808={len(BASS_808)/SR:.2f}s')
 print(f'  Clap={len(CLAP)/SR:.2f}s  HH_CL={len(HH_CL)/SR:.2f}s  Crash={len(CRASH)/SR:.2f}s')
+print(f'  FX_Storm={len(FX_STORM)/SR:.2f}s  FX_Uhh={len(FX_UHH)/SR:.2f}s')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -295,21 +314,21 @@ for sec, note_num, vel, _ in drum_events:
         kick_L[bs:e]   += chunk * 0.96
         kick_R[bs:e]   += chunk * 0.96
 
-    elif note_num == 38:   # Snare
+    elif note_num == 38:   # Snare (tutorial: snare -2/-3dB from kick)
         jitter = rng.randint(-MAX_JITTER, MAX_JITTER + 1)
         s      = int(np.clip(bs + jitter, 0, NSAMP - 1))
         snd    = SNARE * g * rng.uniform(0.93, 1.07)
         e      = min(s + len(snd), NSAMP)
-        nk_L[s:e] += snd[:e - s] * 0.88
-        nk_R[s:e] += snd[:e - s] * 0.88
+        nk_L[s:e] += snd[:e - s] * 0.75  # -2/-3dB from kick
+        nk_R[s:e] += snd[:e - s] * 0.75
 
     elif note_num == 39:   # Clap (layered with snare)
         jitter = rng.randint(-MAX_JITTER, MAX_JITTER + 1)
         s      = int(np.clip(bs + jitter, 0, NSAMP - 1))
         snd    = CLAP * g * rng.uniform(0.90, 1.05)
         e      = min(s + len(snd), NSAMP)
-        nk_L[s:e] += snd[:e - s] * 0.82
-        nk_R[s:e] += snd[:e - s] * 0.82
+        nk_L[s:e] += snd[:e - s] * 0.70
+        nk_R[s:e] += snd[:e - s] * 0.70
 
     elif note_num == 42:   # Closed HH
         pan_toggle = not pan_toggle
@@ -339,7 +358,7 @@ drum_R = kick_R + nk_R
 
 dl_room = fftconvolve(drum_L, room_ir, mode='full')[:NSAMP]
 dr_room = fftconvolve(drum_R, room_ir, mode='full')[:NSAMP]
-drum_L  = drum_L * 0.92 + dl_room * 0.06   # 6% wet — dryer for trap
+drum_L  = drum_L * 0.92 + dl_room * 0.06   # 6% wet — dry for trap
 drum_R  = drum_R * 0.92 + dr_room * 0.06
 
 drum_stereo = np.stack([drum_L, drum_R], axis=1)
@@ -379,7 +398,6 @@ print(f'  808 root detected: MIDI {BASS_ROOT_MIDI}  ({_peak_808:.1f} Hz)')
 # Chord roots: C2=36, F1=29, Ab1=32, G1=31
 BASS_TARGETS = {36: 'C2', 29: 'F1', 32: 'Ab1', 31: 'G1'}
 
-# Pre-pitch 808 for each chord root
 pitched_808 = {}
 for target_midi in BASS_TARGETS:
     st = target_midi - BASS_ROOT_MIDI
@@ -394,7 +412,6 @@ bass_notes = parse_track(FIXED_MID, 2)
 bass_L = np.zeros(NSAMP, dtype=np.float32)
 bass_R = np.zeros(NSAMP, dtype=np.float32)
 
-# Map MIDI note to closest target
 def closest_808_target(midi_note):
     return min(BASS_TARGETS.keys(), key=lambda t: abs(t - midi_note))
 
@@ -407,7 +424,6 @@ for sec, midi_note, vel, dur_sec in bass_notes:
     g      = (vel / 127.0) * rng.uniform(0.92, 1.08)
     trim   = min(int(dur_sec * SR), len(snd))
     chunk  = snd[:trim].copy() * g
-    # 20ms fade-out (hold-envelope style)
     fade_n = max(1, int(SR * 0.020))
     if trim > fade_n:
         chunk[-fade_n:] *= np.linspace(1, 0, fade_n)
@@ -416,14 +432,13 @@ for sec, midi_note, vel, dur_sec in bass_notes:
     bass_R[s:e] += chunk[:e - s] * 0.95
 
 bass_buf = np.stack([bass_L, bass_R], axis=1)
-# Stronger sidechain on 808 (duck under kick)
 bass_buf[:, 0] *= (sc_gain * 0.70 + 0.30)
 bass_buf[:, 1] *= (sc_gain * 0.70 + 0.30)
 
 bass_board = pb.Pedalboard([
     pb.HighpassFilter(cutoff_frequency_hz=30),
-    pb.LowpassFilter(cutoff_frequency_hz=300),
-    pb.Distortion(drive_db=4.0),      # 808 grit
+    pb.LowpassFilter(cutoff_frequency_hz=1200),
+    pb.Distortion(drive_db=4.0),
     pb.Compressor(threshold_db=-10, ratio=3.5, attack_ms=4, release_ms=130),
     pb.Gain(gain_db=3.5),
     pb.Limiter(threshold_db=-1.5),
@@ -450,7 +465,7 @@ for vi, voice in enumerate(voices):
 pad_buf[:, 0] *= (sc_gain * 0.20 + 0.80)
 pad_buf[:, 1] *= (sc_gain * 0.20 + 0.80)
 pad_board = pb.Pedalboard([
-    pb.HighpassFilter(cutoff_frequency_hz=80),
+    pb.HighpassFilter(cutoff_frequency_hz=150),
     pb.LowpassFilter(cutoff_frequency_hz=8000),
     pb.Reverb(room_size=0.85, damping=0.40, wet_level=0.42, dry_level=0.80, width=0.98),
     pb.Compressor(threshold_db=-18, ratio=2.5, attack_ms=40, release_ms=500),
@@ -461,10 +476,36 @@ print(f'  ✓  Pad  max={np.abs(pad_buf).max():.3f}')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 6 — DARK BELL LEAD (FAUST FM synth)
+# STEP 6 — PIANO (FAUST synth — bright plucked tone)
 # ══════════════════════════════════════════════════════════════════════════════
-print('\nStep 6: Synthesizing dark bell lead …')
-lead_notes = parse_track(FIXED_MID, 4)
+print('\nStep 6: Synthesizing Piano …')
+piano_notes = parse_track(FIXED_MID, 4)
+piano_notes = humanize_notes(piano_notes, timing_ms=10, vel_range=4)
+print(f'  Piano events: {len(piano_notes)}')
+
+freq_a, gate_a, gain_a = make_automation(piano_notes)
+piano_buf = faust_render(PIANO_DSP, freq_a, gate_a, gain_a, vol=0.60)
+piano_buf = piano_buf[:NSAMP]
+
+piano_buf[:, 0] *= (sc_gain * 0.15 + 0.85)
+piano_buf[:, 1] *= (sc_gain * 0.15 + 0.85)
+
+piano_board = pb.Pedalboard([
+    pb.HighpassFilter(cutoff_frequency_hz=180),
+    pb.LowpassFilter(cutoff_frequency_hz=6000),
+    pb.Reverb(room_size=0.60, damping=0.55, wet_level=0.28, dry_level=0.85, width=0.80),
+    pb.Compressor(threshold_db=-14, ratio=2.5, attack_ms=8, release_ms=180),
+    pb.Gain(gain_db=0.5),
+])
+piano_buf = apply_pb(piano_buf, piano_board)
+print(f'  ✓  Piano  notes={len(piano_notes)}  max={np.abs(piano_buf).max():.3f}')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 7 — DARK BELL LEAD (FAUST FM synth)
+# ══════════════════════════════════════════════════════════════════════════════
+print('\nStep 7: Synthesizing dark bell lead …')
+lead_notes = parse_track(FIXED_MID, 5)
 lead_notes = humanize_notes(lead_notes, timing_ms=6, vel_range=3)
 print(f'  Lead events: {len(lead_notes)}')
 
@@ -472,12 +513,11 @@ freq_a, gate_a, gain_a = make_automation(lead_notes)
 lead_buf = faust_render(LEAD_DSP, freq_a, gate_a, gain_a, vol=0.65)
 lead_buf = lead_buf[:NSAMP]
 
-# Sidechain the lead slightly
 lead_buf[:, 0] *= (sc_gain * 0.15 + 0.85)
 lead_buf[:, 1] *= (sc_gain * 0.15 + 0.85)
 
 lead_board = pb.Pedalboard([
-    pb.HighpassFilter(cutoff_frequency_hz=150),
+    pb.HighpassFilter(cutoff_frequency_hz=200),
     pb.LowpassFilter(cutoff_frequency_hz=8000),
     pb.Reverb(room_size=0.80, damping=0.50, wet_level=0.40, dry_level=0.75, width=0.92),
     pb.Compressor(threshold_db=-16, ratio=2.5, attack_ms=6, release_ms=200),
@@ -488,9 +528,53 @@ print(f'  ✓  Lead  notes={len(lead_notes)}  max={np.abs(lead_buf).max():.3f}')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 7 — Transition FX
+# STEP 8 — Atmosphere + Vocal Chops
 # ══════════════════════════════════════════════════════════════════════════════
-print('\nStep 7: Transition FX …')
+print('\nStep 8: Atmosphere + vocal chops …')
+atmo_L = np.zeros(NSAMP, dtype=np.float32)
+atmo_R = np.zeros(NSAMP, dtype=np.float32)
+
+# Loop FX-Storm quietly under the whole song
+storm_len = len(FX_STORM)
+pos = 0
+while pos < NSAMP:
+    end = min(pos + storm_len, NSAMP)
+    chunk = FX_STORM[:end - pos]
+    atmo_L[pos:end] += chunk * 0.08
+    atmo_R[pos:end] += chunk * 0.08
+    pos += storm_len
+
+# Vocal chop (FX-Uhh) at hook entries, pitched down
+uhh_pitched = pb.Pedalboard([pb.PitchShift(semitones=-7)])(
+    FX_UHH[np.newaxis, :], SR)[0].astype(np.float32)
+uhh_verb = pb.Pedalboard([
+    pb.Reverb(room_size=0.80, damping=0.30, wet_level=0.55, dry_level=0.60, width=0.95),
+    pb.Distortion(drive_db=3.0),
+])(uhh_pitched[np.newaxis, :], SR)[0].astype(np.float32)
+
+# Place at hook A entry, hook B entry
+for hook_bar in [HOOKA_S, HOOKB_S]:
+    s = int(bar_to_s(hook_bar) * SR)
+    place(atmo_L, atmo_R, uhh_verb * 0.35, s, 0.55, 0.45)
+
+# Place lighter at verse entry
+s = int(bar_to_s(VERSE_S) * SR)
+place(atmo_L, atmo_R, uhh_verb * 0.20, s, 0.45, 0.55)
+
+atmo_buf = np.stack([atmo_L, atmo_R], axis=1)
+atmo_board = pb.Pedalboard([
+    pb.HighpassFilter(cutoff_frequency_hz=200),
+    pb.LowpassFilter(cutoff_frequency_hz=10000),
+    pb.Compressor(threshold_db=-18, ratio=2.0, attack_ms=20, release_ms=300),
+])
+atmo_buf = apply_pb(atmo_buf, atmo_board)
+print(f'  ✓  Atmosphere + vocal chops')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 9 — Transition FX
+# ══════════════════════════════════════════════════════════════════════════════
+print('\nStep 9: Transition FX …')
 fx_L = np.zeros(NSAMP, dtype=np.float32)
 fx_R = np.zeros(NSAMP, dtype=np.float32)
 
@@ -528,18 +612,18 @@ def reverse_tail(target_bar, length_beats=3):
     place(fx_L, fx_R, chunk, start_s, 0.48, 0.52)
 
 
-# Intro → Hook A (bar 8): snare roll + reverse tail + crash
+# Intro → Hook A (bar 8)
 snare_roll(HOOKA_S, bars_build=1.0)
 reverse_tail(HOOKA_S, length_beats=3)
 place(fx_L, fx_R, CRASH * 0.72, int(bar_to_s(HOOKA_S) * SR), 0.44, 0.56)
 
-# Hook A → Verse (bar 24): light crash
+# Hook A → Verse (bar 24)
 place(fx_L, fx_R, CRASH * 0.45, int(bar_to_s(HOOKA_E) * SR), 0.44, 0.56)
 
-# Verse → Bridge (bar 40): reverse tail
+# Verse → Bridge (bar 40)
 reverse_tail(BRIDGE_S, length_beats=2)
 
-# Bridge → Hook B (bar 48): big transition
+# Bridge → Hook B (bar 48)
 snare_roll(HOOKB_S, bars_build=2.0)
 reverse_tail(HOOKB_S, length_beats=3)
 place(fx_L, fx_R, CRASH * 0.72, int(bar_to_s(HOOKB_S) * SR), 0.44, 0.56)
@@ -556,28 +640,33 @@ print('  ✓  Snare builds + reverse tails + crash hits')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 8 — Stereo panning + final mix
+# STEP 10 — Stereo panning + final mix
 # ══════════════════════════════════════════════════════════════════════════════
-print('\nStep 8: Stereo panning + final mix …')
+print('\nStep 10: Stereo panning + final mix …')
 
 drum_panned  = pan_stereo(drum_stereo, 0.0)
 bass_panned  = pan_stereo(bass_buf, 0.0)
 pad_panned   = stereo_widen(pad_buf, 20)
-lead_panned  = stereo_widen(lead_buf, 18)   # 18ms Haas for dark width
+piano_panned = stereo_widen(piano_buf, 15)
+lead_panned  = stereo_widen(lead_buf, 18)
+atmo_panned  = stereo_widen(atmo_buf, 22)
 fx_panned    = pan_stereo(fx_buf, 0.0)
 
-# Mix levels: kick+808 loudest, snare -2/-3dB, lead -8dB
+# Mix levels (tutorial: kick+808 loudest, snare -2/-3dB, melody -6dB)
 mix = (drum_panned  * 0.90 +
        bass_panned  * 0.92 +
-       pad_panned   * 0.58 +
-       lead_panned  * 0.30 +
+       pad_panned   * 0.55 +
+       piano_panned * 0.42 +
+       lead_panned  * 0.30 +    # LEAD MIX RULE: cap at 0.32
+       atmo_panned  * 0.18 +
        fx_panned    * 0.50)
 
 
+
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 9 — Master chain
+# STEP 11 — Master chain
 # ══════════════════════════════════════════════════════════════════════════════
-print('Step 9: Master chain …')
+print('Step 11: Master chain …')
 master_board = pb.Pedalboard([
     pb.HighpassFilter(cutoff_frequency_hz=28),
     pb.LowpassFilter(cutoff_frequency_hz=18000),
@@ -592,20 +681,78 @@ mix  = mix[:trim]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STEP 10 — Export
+# STEP 11.5 — LUFS normalization
 # ══════════════════════════════════════════════════════════════════════════════
-print('Step 10: Exporting …')
-out_i16 = (mix * 32767).clip(-32767, 32767).astype(np.int16)
-wavfile.write(OUT_WAV, SR, out_i16)
-print(f'  ✓  WAV: {os.path.getsize(OUT_WAV)/1e6:.1f} MB')
+print('Step 11.5: LUFS normalization …')
+meter = pyln.Meter(SR, block_size=0.400)
+TARGET_LUFS = -14.0
 
-seg = AudioSegment.from_wav(OUT_WAV)
-seg.export(OUT_MP3, format='mp3', bitrate='192k', tags={
-    'title':  f'Dark Trap {_vstr}',
-    'artist': 'Claude Code',
-    'album':  'Dark Trap Beat',
-    'genre':  'Trap',
-})
-m, s = divmod(int(len(seg) / 1000), 60)
-print(f'  ✓  MP3: {os.path.getsize(OUT_MP3)/1e6:.1f} MB  |  {m}:{s:02d}')
+lufs_before = meter.integrated_loudness(mix)
+print(f'  Pre-norm LUFS: {lufs_before:.1f}')
+if np.isfinite(lufs_before):
+    gain_db = TARGET_LUFS - lufs_before
+    mix = mix * (10 ** (gain_db / 20.0))
+    limit_board = pb.Pedalboard([pb.Limiter(threshold_db=-0.5)])
+    mix = apply_pb(mix, limit_board)
+    lufs_after = meter.integrated_loudness(mix)
+    print(f'  Post-norm LUFS: {lufs_after:.1f}  (target: {TARGET_LUFS})')
+else:
+    print('  Could not measure LUFS — skipping normalization')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 12 — Export
+# ══════════════════════════════════════════════════════════════════════════════
+print('Step 12: Exporting …')
+
+def export(buf, wav_path, mp3_path, title):
+    out_i16 = (buf * 32767).clip(-32767, 32767).astype(np.int16)
+    wavfile.write(wav_path, SR, out_i16)
+    seg = AudioSegment.from_wav(wav_path)
+    seg.export(mp3_path, format='mp3', bitrate='192k', tags={
+        'title':  title,
+        'artist': 'Claude Code',
+        'album':  'Dark Trap Beat',
+        'genre':  'Trap',
+    })
+    m, s = divmod(int(len(seg) / 1000), 60)
+    print(f'  ✓  {os.path.basename(mp3_path)}: {os.path.getsize(mp3_path)/1e6:.1f} MB  |  {m}:{s:02d}')
+
+export(mix, OUT_WAV, OUT_MP3, f'Dark Trap {_vstr}')
+
 print(f'\nDone!  →  {OUT_MP3}')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 12.5 — Mix analysis
+# ══════════════════════════════════════════════════════════════════════════════
+print('\n── Mix Analysis ──')
+y_mono = mix.mean(axis=1).astype(np.float32)
+rms_val = np.sqrt(np.mean(y_mono ** 2))
+_spec = np.abs(np.fft.rfft(y_mono))
+_freqs = np.fft.rfftfreq(len(y_mono), 1.0 / SR)
+_spec_sum = _spec.sum() + 1e-9
+centroid_hz = np.sum(_freqs * _spec) / _spec_sum
+bw_hz = np.sqrt(np.sum(((_freqs - centroid_hz) ** 2) * _spec) / _spec_sum)
+final_lufs = meter.integrated_loudness(mix)
+print(f'  Spectral centroid: {centroid_hz:.0f} Hz')
+print(f'  Spectral bandwidth: {bw_hz:.0f} Hz')
+print(f'  RMS: {rms_val:.4f}  ({20*np.log10(rms_val+1e-9):.1f} dB)')
+print(f'  Integrated LUFS: {final_lufs:.1f}')
+
+# librosa analysis in subprocess (avoids dawdreamer/numba LLVM conflict)
+_analysis = subprocess.run(
+    ['python', '-c', f"""
+import numpy as np, json, librosa
+y, _ = librosa.load('{OUT_WAV}', sr={SR}, mono=True)
+c = float(librosa.feature.spectral_centroid(y=y, sr={SR}).mean())
+r = float(librosa.feature.rms(y=y).mean())
+b = float(librosa.feature.spectral_bandwidth(y=y, sr={SR}).mean())
+print(json.dumps({{"centroid": c, "rms": r, "bandwidth": b}}))
+"""], capture_output=True, text=True)
+if _analysis.returncode == 0:
+    _a = json.loads(_analysis.stdout.strip())
+    print(f'  librosa centroid: {_a["centroid"]:.0f} Hz')
+    print(f'  librosa bandwidth: {_a["bandwidth"]:.0f} Hz')
+    print(f'  librosa RMS: {_a["rms"]:.4f}  ({20*np.log10(_a["rms"]+1e-9):.1f} dB)')
+print('──────────────────')
